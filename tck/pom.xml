@@ -1,0 +1,23 @@
+<?xml version="1.0"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+	<modelVersion>4.0.0</modelVersion>
+	<parent>
+		<groupId>org.osgi</groupId>
+		<artifactId>org.osgi.service.async.reactor</artifactId>
+		<version>${revision}</version>
+	</parent>
+	<groupId>org.osgi.tck</groupId>
+	<artifactId>org.osgi.tck.service.async</artifactId>
+	<packaging>pom</packaging>
+
+	<modules>
+		<module>org.osgi.test.cases.async</module>
+		<module>org.osgi.test.cases.async.secure</module>
+		<module>org.osgi.impl.service.async</module>
+		<module>org.osgi.test.run.async</module>
+		<module>org.osgi.test.run.async.secure</module>
+	</modules>
+
+</project>
