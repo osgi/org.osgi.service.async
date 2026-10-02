@@ -1,0 +1,8 @@
+target/
+bin/
+bin_test/
+generated/
+.classpath
+.project
+.settings/
+.flattened-pom.xml
