@@ -1,0 +1,18 @@
+# Managed by otterdog blueprint codeql-analysis. Do not edit here.
+# CodeQL logic lives in osgi/.github (reusable workflow).
+name: CodeQL
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  schedule:
+    - cron: '17 4 * * 3'
+permissions:
+  contents: read
+jobs:
+  analyze:
+    permissions:
+      contents: read
+      security-events: write
+    uses: osgi/.github/.github/workflows/codeql.yml@main
