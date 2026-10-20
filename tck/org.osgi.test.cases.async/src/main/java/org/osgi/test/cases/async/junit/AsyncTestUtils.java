@@ -17,6 +17,9 @@
  *******************************************************************************/
 package org.osgi.test.cases.async.junit;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.fail;
+
 import java.lang.reflect.InvocationTargetException;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
@@ -24,7 +27,6 @@ import java.util.concurrent.TimeUnit;
 import org.osgi.framework.ServiceException;
 import org.osgi.util.promise.Promise;
 
-import junit.framework.TestCase;
 
 public class AsyncTestUtils {
 
@@ -33,13 +35,9 @@ public class AsyncTestUtils {
 	}
 
 	public static void checkForAsyncFailure(Throwable failure) {
-		TestCase.assertNotNull("Expected failure from promise.", failure);
-		TestCase.assertTrue(
-				"Wrong failure type: " + failure.getClass().getName(),
-				failure instanceof ServiceException);
-		TestCase.assertEquals("Expected ASYNC_ERROR type",
-				ServiceException.ASYNC_ERROR,
-				((ServiceException) failure).getType());
+		assertThat(failure).as("Expected failure from promise.").isNotNull();
+		assertThat(failure instanceof ServiceException).as("Wrong failure type: " + failure.getClass().getName()).isTrue();
+		assertThat(((ServiceException) failure).getType()).as("Expected ASYNC_ERROR type").isEqualTo(ServiceException.ASYNC_ERROR);
 	}
 
 	public static <T> T awaitResolve(Promise<T> promise) throws InterruptedException, InvocationTargetException {
@@ -53,7 +51,7 @@ public class AsyncTestUtils {
 		if (promise.isDone()) {
 			return promise.getValue();
 		}
-		TestCase.fail("No result in time.");
+		fail("No result in time.");
 		return null;
 	}
 
@@ -68,7 +66,7 @@ public class AsyncTestUtils {
 		if (promise.isDone()) {
 			return promise.getFailure();
 		}
-		TestCase.fail("No result in time.");
+		fail("No result in time.");
 		return null;
 	}
 

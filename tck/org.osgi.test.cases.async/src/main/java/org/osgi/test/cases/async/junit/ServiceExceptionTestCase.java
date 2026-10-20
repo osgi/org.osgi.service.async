@@ -17,8 +17,13 @@
  *******************************************************************************/
 package org.osgi.test.cases.async.junit;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
 import java.io.IOException;
 
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 import org.osgi.framework.Bundle;
 import org.osgi.framework.BundleContext;
 import org.osgi.framework.BundleException;
@@ -30,11 +35,19 @@ import org.osgi.service.log.LogReaderService;
 import org.osgi.test.cases.async.junit.impl.AsyncErrorListener;
 import org.osgi.test.cases.async.junit.impl.MyServiceFactory;
 import org.osgi.test.cases.async.services.MyService;
-import org.osgi.test.support.OSGiTestCase;
+import org.osgi.test.common.annotation.InjectBundleContext;
+import org.osgi.test.common.annotation.InjectBundleInstaller;
+import org.osgi.test.common.install.BundleInstaller;
 import org.osgi.util.promise.Promise;
 import org.osgi.util.tracker.ServiceTracker;
 
-public class ServiceExceptionTestCase extends OSGiTestCase {
+public class ServiceExceptionTestCase {
+
+	@InjectBundleContext
+	BundleContext		context;
+
+	@InjectBundleInstaller
+	BundleInstaller		installer;
 	private ServiceTracker<Async, Async>	asyncTracker;
 	private Async	async;
 
@@ -48,28 +61,30 @@ public class ServiceExceptionTestCase extends OSGiTestCase {
 	private MyServiceFactory factory;
 	private ServiceRegistration<MyService> factoryReg;
 
-	protected void setUp() throws InterruptedException, BundleException, IOException {
+	@BeforeEach
+	public void setUp() throws InterruptedException, BundleException, IOException {
 		factory = new MyServiceFactory();
-		factoryReg = getContext().registerService(MyService.class, factory, null);
+		factoryReg = context.registerService(MyService.class, factory, null);
 
-		asyncTracker = new ServiceTracker<Async, Async>(getContext(), Async.class, null);
+		asyncTracker = new ServiceTracker<Async, Async>(context, Async.class, null);
 		asyncTracker.open();
 		async = asyncTracker.waitForService(5000);
 		asyncBundle = asyncTracker.getServiceReference().getBundle();
 
-		assertNotNull("No Async service available within 5 seconds", async);
+		assertThat(async).as("No Async service available within 5 seconds").isNotNull();
 
-		clientBundle = install("tb1.jar");
+		clientBundle = installer.installBundle("tb1.jar", false);
 		clientBundle.start();
 
-		logReaderTracker = new ServiceTracker<LogReaderService, LogReaderService>(getContext(), LogReaderService.class, null);
+		logReaderTracker = new ServiceTracker<LogReaderService, LogReaderService>(context, LogReaderService.class, null);
 		logReaderTracker.open();
 		logReader = logReaderTracker.waitForService(5000);
-		assertNotNull("No LogReaderService available within 5 seconds", logReader);
+		assertThat(logReader).as("No LogReaderService available within 5 seconds").isNotNull();
 		logReader.addLogListener(asyncErrors  = new AsyncErrorListener());
 	}
 	
-	protected void tearDown() {
+	@AfterEach
+	public void tearDown() {
 		asyncTracker.close();
 
 		logReader.removeLogListener(asyncErrors);
@@ -91,12 +106,13 @@ public class ServiceExceptionTestCase extends OSGiTestCase {
 	private Async getClientAsync() {
 		BundleContext context = clientBundle.getBundleContext();
 		ServiceReference<Async> asyncRef = context.getServiceReference(Async.class);
-		assertNotNull("No Async service for client.", asyncRef);
+		assertThat(asyncRef).as("No Async service for client.").isNotNull();
 		Async clientAsync = context.getService(asyncRef);
-		assertNotNull("Client Async is null.", clientAsync);
+		assertThat(clientAsync).as("Client Async is null.").isNotNull();
 		return clientAsync;
 	}
 
+	@Test
 	public void testAsyncCallAfterUnregistered() throws Exception {
 		MyService mediated = async.mediate(factoryReg.getReference(), MyService.class);
 		int mediatedResult = mediated.countSlowly(10);
@@ -105,6 +121,7 @@ public class ServiceExceptionTestCase extends OSGiTestCase {
 		AsyncTestUtils.checkForAsyncFailure(async.call(mediatedResult));
 	}
 
+	@Test
 	public void testAsyncExecuteAfterUnregistered() throws Exception {
 		async.mediate(factoryReg.getReference(), MyService.class).countSlowly(10);
 
@@ -115,6 +132,7 @@ public class ServiceExceptionTestCase extends OSGiTestCase {
 		AsyncTestUtils.checkForAsyncFailure(AsyncTestUtils.awaitResolve(asyncErrorPromise).getException());
 	}
 
+	@Test
 	public void testAsyncCallWhenFactoryReturnsNull() throws Exception {
 		MyService mediated = async.mediate(factoryReg.getReference(), MyService.class);
 		int mediatedResult = mediated.countSlowly(10);
@@ -123,6 +141,7 @@ public class ServiceExceptionTestCase extends OSGiTestCase {
 		AsyncTestUtils.checkForAsyncFailure(async.call(mediatedResult));
 	}
 
+	@Test
 	public void testAsyncExecuteWhenFactoryReturnsNull() throws Exception {
 		async.mediate(factoryReg.getReference(), MyService.class).countSlowly(10);
 
@@ -133,6 +152,7 @@ public class ServiceExceptionTestCase extends OSGiTestCase {
 		AsyncTestUtils.checkForAsyncFailure(AsyncTestUtils.awaitResolve(asyncErrorPromise).getException());
 	}
 
+	@Test
 	public void testAsyncCallWhenImplStopped() throws Exception {
 		// Note that no test is done in this case for execute because there is no way
 		// the impl can log after it is stopped.
@@ -146,6 +166,7 @@ public class ServiceExceptionTestCase extends OSGiTestCase {
 		}
 	}
 
+	@Test
 	public void testAsyncCallWhenClientStopped() throws Exception {
 		Async clientAsync = getClientAsync();
 		MyService mediated = clientAsync.mediate(factoryReg.getReference(), MyService.class);
@@ -158,6 +179,7 @@ public class ServiceExceptionTestCase extends OSGiTestCase {
 		}
 	}
 
+	@Test
 	public void testAsyncExecuteWhenClientStopped() throws Exception {
 		Async clientAsync = getClientAsync();
 		clientAsync.mediate(factoryReg.getReference(), MyService.class).countSlowly(10);

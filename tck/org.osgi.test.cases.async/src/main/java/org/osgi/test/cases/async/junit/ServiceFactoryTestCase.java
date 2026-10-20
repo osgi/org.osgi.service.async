@@ -17,6 +17,12 @@
  *******************************************************************************/
 package org.osgi.test.cases.async.junit;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.osgi.framework.BundleContext;
 import org.osgi.framework.ServiceRegistration;
 import org.osgi.service.async.Async;
 import org.osgi.service.log.LogEntry;
@@ -25,11 +31,14 @@ import org.osgi.test.cases.async.junit.impl.AsyncErrorListener;
 import org.osgi.test.cases.async.junit.impl.MyServiceException;
 import org.osgi.test.cases.async.junit.impl.MyServiceFactory;
 import org.osgi.test.cases.async.services.MyService;
-import org.osgi.test.support.OSGiTestCase;
+import org.osgi.test.common.annotation.InjectBundleContext;
 import org.osgi.util.promise.Promise;
 import org.osgi.util.tracker.ServiceTracker;
 
-public class ServiceFactoryTestCase extends OSGiTestCase {
+public class ServiceFactoryTestCase {
+
+	@InjectBundleContext
+	BundleContext		context;
 	
 	private ServiceTracker<Async, Async>	asyncTracker;
 	private Async	async;
@@ -41,24 +50,26 @@ public class ServiceFactoryTestCase extends OSGiTestCase {
 	private MyServiceFactory myServiceFactory;
 	private ServiceRegistration<MyService> factoryReg;
 	
-	protected void setUp() throws InterruptedException {
+	@BeforeEach
+	public void setUp() throws InterruptedException {
 		myServiceFactory = new MyServiceFactory();
-		factoryReg = getContext().registerService(MyService.class, myServiceFactory, null);
+		factoryReg = context.registerService(MyService.class, myServiceFactory, null);
 
-		asyncTracker = new ServiceTracker<Async, Async>(getContext(), Async.class, null);
+		asyncTracker = new ServiceTracker<Async, Async>(context, Async.class, null);
 		asyncTracker.open();
 		async = asyncTracker.waitForService(5000);
 
-		assertNotNull("No Async service available within 5 seconds", async);
+		assertThat(async).as("No Async service available within 5 seconds").isNotNull();
 
-		logReaderTracker = new ServiceTracker<LogReaderService, LogReaderService>(getContext(), LogReaderService.class, null);
+		logReaderTracker = new ServiceTracker<LogReaderService, LogReaderService>(context, LogReaderService.class, null);
 		logReaderTracker.open();
 		logReader = logReaderTracker.waitForService(5000);
-		assertNotNull("No LogReaderService available within 5 seconds", logReader);
+		assertThat(logReader).as("No LogReaderService available within 5 seconds").isNotNull();
 		logReader.addLogListener(asyncErrors  = new AsyncErrorListener());
 	}
 	
-	protected void tearDown() {
+	@AfterEach
+	public void tearDown() {
 		factoryReg.unregister();
 
 		asyncTracker.close();
@@ -67,46 +78,50 @@ public class ServiceFactoryTestCase extends OSGiTestCase {
 	}
 	
 
+	@Test
 	public void testAsyncCallGetUngetServiceCalls() throws Exception {
 		MyService service = async.mediate(factoryReg.getReference(), MyService.class);
 
 		Promise<Integer> p = async.call(service.countSlowly(2));
-		assertFalse(p.isDone());
-		assertEquals("Wrong value.", 2, AsyncTestUtils.awaitResolve(p).intValue());
+		assertThat(p.isDone()).isFalse();
+		assertThat(AsyncTestUtils.awaitResolve(p).intValue()).as("Wrong value.").isEqualTo(2);
 
-		assertEquals("Wrong method called.", MyService.METHOD_countSlowly, myServiceFactory.getMySerivceImpl().lastMethodCalled());
+		assertThat(myServiceFactory.getMySerivceImpl().lastMethodCalled()).as("Wrong method called.").isEqualTo(MyService.METHOD_countSlowly);
 		myServiceFactory.awaitUngetService();
 	}
 
+	@Test
 	public void testAsyncExecuteGetUngetServiceCalls() throws Exception {
 		async.mediate(factoryReg.getReference(), MyService.class).countSlowly(2);
 
 		async.execute();
 
 		myServiceFactory.awaitUngetService();
-		assertEquals("Wrong method called.", MyService.METHOD_countSlowly, myServiceFactory.getMySerivceImpl().lastMethodCalled());
+		assertThat(myServiceFactory.getMySerivceImpl().lastMethodCalled()).as("Wrong method called.").isEqualTo(MyService.METHOD_countSlowly);
 	}
 
+	@Test
 	public void testAsyncCallGetUngetServiceCallsWithFailure() throws Exception {
 		MyService service = async.mediate(factoryReg.getReference(), MyService.class);
 
 		Promise<Integer> p = async.call(service.failSlowly(2));
-		assertFalse(p.isDone());
-		assertTrue("Wrong failture type.", AsyncTestUtils.awaitFailure(p) instanceof MyServiceException);
+		assertThat(p.isDone()).isFalse();
+		assertThat(AsyncTestUtils.awaitFailure(p) instanceof MyServiceException).as("Wrong failture type.").isTrue();
 
-		assertEquals("Wrong method called.", MyService.METHOD_failSlowly, myServiceFactory.getMySerivceImpl().lastMethodCalled());
+		assertThat(myServiceFactory.getMySerivceImpl().lastMethodCalled()).as("Wrong method called.").isEqualTo(MyService.METHOD_failSlowly);
 		myServiceFactory.awaitUngetService();
 	}
 
+	@Test
 	public void testAsyncExecuteGetUngetServiceCallsWithFailure() throws Exception {
 		async.mediate(factoryReg.getReference(), MyService.class).failSlowly(2);
 
 		Promise<LogEntry> asyncErrorPromise = asyncErrors.getAsyncError();
 		async.execute();
 		Throwable error = AsyncTestUtils.awaitResolve(asyncErrorPromise).getException();
-		assertTrue("Wrong error type: " + error, error instanceof MyServiceException);
+		assertThat(error instanceof MyServiceException).as("Wrong error type: " + error).isTrue();
 
 		myServiceFactory.awaitUngetService();
-		assertEquals("Wrong method called.", MyService.METHOD_failSlowly, myServiceFactory.getMySerivceImpl().lastMethodCalled());
+		assertThat(myServiceFactory.getMySerivceImpl().lastMethodCalled()).as("Wrong method called.").isEqualTo(MyService.METHOD_failSlowly);
 	}
 }
