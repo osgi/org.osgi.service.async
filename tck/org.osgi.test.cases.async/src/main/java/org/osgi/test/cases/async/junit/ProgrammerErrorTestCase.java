@@ -17,16 +17,26 @@
  *******************************************************************************/
 package org.osgi.test.cases.async.junit;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.fail;
+
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicReference;
 
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.osgi.framework.BundleContext;
 import org.osgi.framework.ServiceRegistration;
 import org.osgi.service.async.Async;
 import org.osgi.test.cases.async.services.MyService;
-import org.osgi.test.support.OSGiTestCase;
+import org.osgi.test.common.annotation.InjectBundleContext;
 import org.osgi.util.tracker.ServiceTracker;
 
-public class ProgrammerErrorTestCase extends OSGiTestCase {
+public class ProgrammerErrorTestCase {
+
+	@InjectBundleContext
+	BundleContext		context;
 	private ServiceTracker<Async, Async>	asyncTracker;
 	private Async	async;
 	
@@ -59,22 +69,25 @@ public class ProgrammerErrorTestCase extends OSGiTestCase {
 		}
 	}
 
-	protected void setUp() throws InterruptedException {
+	@BeforeEach
+	public void setUp() throws InterruptedException {
 		myServiceImpl = new DummyMyService();
-		normalReg = getContext().registerService(MyService.class, myServiceImpl, null);
+		normalReg = context.registerService(MyService.class, myServiceImpl, null);
 
-		asyncTracker = new ServiceTracker<Async, Async>(getContext(), Async.class, null);
+		asyncTracker = new ServiceTracker<Async, Async>(context, Async.class, null);
 		asyncTracker.open();
 		async = asyncTracker.waitForService(5000);
 
-		assertNotNull("No Async service available within 5 seconds", async);
+		assertThat(async).as("No Async service available within 5 seconds").isNotNull();
 	}
 	
-	protected void tearDown() {
+	@AfterEach
+	public void tearDown() {
 		asyncTracker.close();
 		normalReg.unregister();
 	}
 
+	@Test
 	public void testAsyncCallWithoutMediatorCall() {
 		async.mediate(normalReg.getReference(), MyService.class);
 		try {
@@ -87,6 +100,7 @@ public class ProgrammerErrorTestCase extends OSGiTestCase {
 		}
 	}
 
+	@Test
 	public void testAsyncCallWithMediatorCalledMultipleTimes() {
 		MyService mediated = async.mediate(normalReg.getReference(), MyService.class);
 		try {
@@ -109,6 +123,7 @@ public class ProgrammerErrorTestCase extends OSGiTestCase {
 		}
 	}
 
+	@Test
 	public void testAsyncCallMultipleTimesWithSameMediator() {
 		MyService mediated = async.mediate(normalReg.getReference(), MyService.class);
 		try {
@@ -125,6 +140,7 @@ public class ProgrammerErrorTestCase extends OSGiTestCase {
 		}
 	}
 
+	@Test
 	public void testAsyncCallWithNoMediator() {
 		try {
 			async.execute();
@@ -136,6 +152,7 @@ public class ProgrammerErrorTestCase extends OSGiTestCase {
 		}
 	}
 
+	@Test
 	public void testNewMediatorWithPendingMethods() {
 		MyService mediated = async.mediate(normalReg.getReference(), MyService.class);
 		try {
@@ -160,6 +177,7 @@ public class ProgrammerErrorTestCase extends OSGiTestCase {
 			fail("Unexpected exception.", e);
 		}
 	}
+	@Test
 	public void testAsyncAndMediatorCalledWithDifferentThreads() throws InterruptedException {
 		final CountDownLatch called = new CountDownLatch(1);
 		final MyService mediated = async.mediate(normalReg.getReference(), MyService.class);

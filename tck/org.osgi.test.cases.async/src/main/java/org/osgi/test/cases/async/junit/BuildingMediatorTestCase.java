@@ -17,27 +17,41 @@
  *******************************************************************************/
 package org.osgi.test.cases.async.junit;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.fail;
+
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 import org.osgi.framework.Bundle;
 import org.osgi.framework.BundleContext;
 import org.osgi.framework.BundleException;
 import org.osgi.framework.ServiceReference;
 import org.osgi.framework.ServiceRegistration;
 import org.osgi.service.async.Async;
-import org.osgi.test.cases.async.junit.impl.MyServiceImpl;
 import org.osgi.test.cases.async.junit.impl.MyServiceImpl.ExtendedFinalMethodMyServiceImpl;
 import org.osgi.test.cases.async.junit.impl.MyServiceImpl.FinalMethodMyServiceImpl;
 import org.osgi.test.cases.async.junit.impl.MyServiceImpl.FinalMyServiceImpl;
 import org.osgi.test.cases.async.junit.impl.MyServiceImpl.NoZeroArgConstructorMyServiceImpl;
+import org.osgi.test.cases.async.junit.impl.MyServiceImpl;
 import org.osgi.test.cases.async.services.AnotherService;
 import org.osgi.test.cases.async.services.MyService;
-import org.osgi.test.support.OSGiTestCase;
+import org.osgi.test.common.annotation.InjectBundleContext;
+import org.osgi.test.common.annotation.InjectBundleInstaller;
+import org.osgi.test.common.install.BundleInstaller;
 import org.osgi.util.tracker.ServiceTracker;
 
-public class BuildingMediatorTestCase extends OSGiTestCase {
+public class BuildingMediatorTestCase {
+
+	@InjectBundleContext
+	BundleContext		context;
+
+	@InjectBundleInstaller
+	BundleInstaller		installer;
 	
 	private ServiceTracker<Async, Async>	asyncTracker;
 	private Async	async;
@@ -55,30 +69,32 @@ public class BuildingMediatorTestCase extends OSGiTestCase {
 
 	private Bundle clientBundle;
 	
-	protected void setUp() throws InterruptedException, BundleException, IOException {
+	@BeforeEach
+	public void setUp() throws InterruptedException, BundleException, IOException {
 		myService = new MyServiceImpl();
 
-		normalReg = getContext().registerService(MyService.class, myService, null);
-		multiObjectClassReg = getContext().registerService(new String[] {MyService.class.getName(), AnotherService.class.getName()}, myService, null);
-		implOnlyObjectClassReg = getContext().registerService(MyServiceImpl.class, myService, null);
-		finalClassReg = getContext().registerService(MyServiceImpl.FinalMyServiceImpl.class, new MyServiceImpl.FinalMyServiceImpl(), null);
-		finalMethodReg = getContext().registerService(MyServiceImpl.FinalMethodMyServiceImpl.class, new MyServiceImpl.FinalMethodMyServiceImpl(), null);
-		extendFinalMethodReg = getContext().registerService(MyServiceImpl.ExtendedFinalMethodMyServiceImpl.class, new MyServiceImpl.ExtendedFinalMethodMyServiceImpl(), null);
-		noZeroArgConstructorReg = getContext().registerService(MyServiceImpl.NoZeroArgConstructorMyServiceImpl.class, new MyServiceImpl.NoZeroArgConstructorMyServiceImpl(1), null);
+		normalReg = context.registerService(MyService.class, myService, null);
+		multiObjectClassReg = context.registerService(new String[] {MyService.class.getName(), AnotherService.class.getName()}, myService, null);
+		implOnlyObjectClassReg = context.registerService(MyServiceImpl.class, myService, null);
+		finalClassReg = context.registerService(MyServiceImpl.FinalMyServiceImpl.class, new MyServiceImpl.FinalMyServiceImpl(), null);
+		finalMethodReg = context.registerService(MyServiceImpl.FinalMethodMyServiceImpl.class, new MyServiceImpl.FinalMethodMyServiceImpl(), null);
+		extendFinalMethodReg = context.registerService(MyServiceImpl.ExtendedFinalMethodMyServiceImpl.class, new MyServiceImpl.ExtendedFinalMethodMyServiceImpl(), null);
+		noZeroArgConstructorReg = context.registerService(MyServiceImpl.NoZeroArgConstructorMyServiceImpl.class, new MyServiceImpl.NoZeroArgConstructorMyServiceImpl(1), null);
 		
-		listReg =  getContext().registerService(List.class, new ArrayList<String>(), null);
+		listReg =  context.registerService(List.class, new ArrayList<String>(), null);
 
-		asyncTracker = new ServiceTracker<Async, Async>(getContext(), Async.class, null);
+		asyncTracker = new ServiceTracker<Async, Async>(context, Async.class, null);
 		asyncTracker.open();
 		async = asyncTracker.waitForService(5000);
 
-		assertNotNull("No Async service available within 5 seconds", async);
+		assertThat(async).as("No Async service available within 5 seconds").isNotNull();
 
-		clientBundle = install("tb1.jar");
+		clientBundle = installer.installBundle("tb1.jar", false);
 		clientBundle.start();
 	}
 	
-	protected void tearDown() {
+	@AfterEach
+	public void tearDown() {
 		normalReg.unregister();
 		multiObjectClassReg.unregister();
 		implOnlyObjectClassReg.unregister();
@@ -101,24 +117,25 @@ public class BuildingMediatorTestCase extends OSGiTestCase {
 	private Async getClientAsync() {
 		BundleContext context = clientBundle.getBundleContext();
 		ServiceReference<Async> asyncRef = context.getServiceReference(Async.class);
-		assertNotNull("No Async service for client.", asyncRef);
+		assertThat(asyncRef).as("No Async service for client.").isNotNull();
 		Async clientAsync = context.getService(asyncRef);
-		assertNotNull("Client Async is null.", clientAsync);
+		assertThat(clientAsync).as("Client Async is null.").isNotNull();
 		return clientAsync;
 	}
 
 	private void assertIsAssignable(Object service, Class<?>... classes) {
 		for (Class<?> clazz : classes) {
-			assertTrue("The service is not assignable to: " + clazz.getName(), clazz.isAssignableFrom(service.getClass()));
+			assertThat(clazz.isAssignableFrom(service.getClass())).as("The service is not assignable to: " + clazz.getName()).isTrue();
 		}
 	}
 
 	private void assertNotAssignable(Object service, Class<?>... classes) {
 		for (Class<?> clazz : classes) {
-			assertFalse("The service is assignable to: " + clazz.getName(), clazz.isAssignableFrom(service.getClass()));
+			assertThat(clazz.isAssignableFrom(service.getClass())).as("The service is assignable to: " + clazz.getName()).isFalse();
 		}
 	}
 
+	@Test
 	public void testReferenceToSingleObjectClassOnly() throws Exception {
 		Object service = async.mediate(normalReg.getReference(), MyService.class);
 		assertIsAssignable(service, MyService.class);
@@ -128,6 +145,7 @@ public class BuildingMediatorTestCase extends OSGiTestCase {
 	/* Added by tim.ward@paremus.com to cover new mediator construction rules */
 	
 	@SuppressWarnings("unchecked")
+	@Test
 	public void testReferenceToSingleObjectClassMediatedToWrongType() throws Exception {
 		@SuppressWarnings("rawtypes")
 		Object service = async.mediate((ServiceReference) normalReg.getReference(), AnotherService.class);
@@ -136,6 +154,7 @@ public class BuildingMediatorTestCase extends OSGiTestCase {
 	}
 	
 	@SuppressWarnings("unchecked")
+	@Test
 	public void testReferenceToMultiObjectClassOnly() throws Exception {
 		Object service = async.mediate((ServiceReference<MyService>)multiObjectClassReg.getReference(), MyService.class);
 		assertIsAssignable(service, MyService.class);
@@ -146,11 +165,13 @@ public class BuildingMediatorTestCase extends OSGiTestCase {
 	}
 	/* End additions */
 
+	@Test
 	public void testReferenceToImplClass() throws Exception {
 		Object service = async.mediate(implOnlyObjectClassReg.getReference(), MyServiceImpl.class);
 		assertIsAssignable(service, MyService.class, AnotherService.class, MyServiceImpl.class);
 	}
 
+	@Test
 	public void testDirectToImplClass() throws Exception {
 		Object service = async.mediate(myService, MyServiceImpl.class);
 		assertIsAssignable(service, MyService.class, AnotherService.class, MyServiceImpl.class);
@@ -168,6 +189,7 @@ public class BuildingMediatorTestCase extends OSGiTestCase {
 		/* End additions */
 	}
 
+	@Test
 	public void testReferenceMediateToFinalClass() {
 		try {
 			async.mediate(finalClassReg.getReference(), FinalMyServiceImpl.class);
@@ -177,6 +199,7 @@ public class BuildingMediatorTestCase extends OSGiTestCase {
 		}
 	}
 
+	@Test
 	public void testDirectMediateToFinalClass() {
 		try {
 			async.mediate(new MyServiceImpl.FinalMyServiceImpl(), FinalMyServiceImpl.class);
@@ -186,6 +209,7 @@ public class BuildingMediatorTestCase extends OSGiTestCase {
 		}
 	}
 
+	@Test
 	public void testReferenceMediateToFinalMethod() {
 		try {
 			async.mediate(finalMethodReg.getReference(), FinalMethodMyServiceImpl.class);
@@ -195,6 +219,7 @@ public class BuildingMediatorTestCase extends OSGiTestCase {
 		}
 	}
 
+	@Test
 	public void testDirectMediateToFinalMethod() {
 		try {
 			async.mediate(new MyServiceImpl.FinalMethodMyServiceImpl(), FinalMethodMyServiceImpl.class);
@@ -204,6 +229,7 @@ public class BuildingMediatorTestCase extends OSGiTestCase {
 		}
 	}
 
+	@Test
 	public void testReferenceMediateToExtendFinalClass() {
 		try {
 			async.mediate(extendFinalMethodReg.getReference(), ExtendedFinalMethodMyServiceImpl.class);
@@ -213,6 +239,7 @@ public class BuildingMediatorTestCase extends OSGiTestCase {
 		}
 	}
 
+	@Test
 	public void testDirectMediateToExtendFinalMethod() {
 		try {
 			async.mediate(new MyServiceImpl.ExtendedFinalMethodMyServiceImpl(), 
@@ -223,6 +250,7 @@ public class BuildingMediatorTestCase extends OSGiTestCase {
 		}
 	}
 
+	@Test
 	public void testReferenceMediateToNoZeroArgConstructor() {
 		try {
 			async.mediate(noZeroArgConstructorReg.getReference(), NoZeroArgConstructorMyServiceImpl.class);
@@ -232,6 +260,7 @@ public class BuildingMediatorTestCase extends OSGiTestCase {
 		}
 	}
 
+	@Test
 	public void testDirectMediateToNoZeroArgConstructor() {
 		try {
 			async.mediate(new MyServiceImpl.NoZeroArgConstructorMyServiceImpl(1), NoZeroArgConstructorMyServiceImpl.class);
@@ -241,22 +270,26 @@ public class BuildingMediatorTestCase extends OSGiTestCase {
 		}
 	}
 
+	@Test
 	public void testReferenceMediateToTypesNotVisibleToClient() {
 		Object service = getClientAsync().mediate(normalReg.getReference(), MyService.class);
 		assertIsAssignable(service, MyService.class);
 		assertNotAssignable(service, AnotherService.class, MyServiceImpl.class);
 	}
 
+	@Test
 	public void testDirectMediateToTypesNotVisibleToClient() {
 		Object service = getClientAsync().mediate(myService, MyServiceImpl.class);
 		assertIsAssignable(service, MyService.class, AnotherService.class, MyServiceImpl.class);
 	}
 
+	@Test
 	public void testReferenceMediateToVMTypes() {
 		Object service = async.mediate(listReg.getReference(), List.class);
 		assertIsAssignable(service, List.class);
 	}
 
+	@Test
 	public void testDirectMediateToVMTypes() {
 		Object service = async.mediate(new ArrayList<String>(), ArrayList.class);
 		assertIsAssignable(service, List.class, ArrayList.class);

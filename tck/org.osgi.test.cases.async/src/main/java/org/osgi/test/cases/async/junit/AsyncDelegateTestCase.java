@@ -17,9 +17,15 @@
  *******************************************************************************/
 package org.osgi.test.cases.async.junit;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.osgi.framework.BundleContext;
 import org.osgi.framework.ServiceRegistration;
 import org.osgi.service.async.Async;
 import org.osgi.service.log.LogEntry;
@@ -28,11 +34,14 @@ import org.osgi.test.cases.async.junit.impl.AsyncErrorListener;
 import org.osgi.test.cases.async.junit.impl.MyServiceAsyncDelegateFactory;
 import org.osgi.test.cases.async.junit.impl.MyServiceException;
 import org.osgi.test.cases.async.services.MyService;
-import org.osgi.test.support.OSGiTestCase;
+import org.osgi.test.common.annotation.InjectBundleContext;
 import org.osgi.util.promise.Promise;
 import org.osgi.util.tracker.ServiceTracker;
 
-public class AsyncDelegateTestCase extends OSGiTestCase  {
+public class AsyncDelegateTestCase  {
+
+	@InjectBundleContext
+	BundleContext		context;
 	private ServiceTracker<Async, Async>	asyncTracker;
 	private Async	async;
 
@@ -45,25 +54,27 @@ public class AsyncDelegateTestCase extends OSGiTestCase  {
 
 	private ServiceRegistration<MyService> delegateReg;
 	
-	protected void setUp() throws InterruptedException {
+	@BeforeEach
+	public void setUp() throws InterruptedException {
 		asyncExecutor = Executors.newSingleThreadExecutor();
 		myServiceDelegateFactory = new MyServiceAsyncDelegateFactory(asyncExecutor);
-		delegateReg = getContext().registerService(MyService.class, myServiceDelegateFactory, null);
+		delegateReg = context.registerService(MyService.class, myServiceDelegateFactory, null);
 
-		asyncTracker = new ServiceTracker<Async, Async>(getContext(), Async.class, null);
+		asyncTracker = new ServiceTracker<Async, Async>(context, Async.class, null);
 		asyncTracker.open();
 		async = asyncTracker.waitForService(5000);
 
-		assertNotNull("No Async service available within 5 seconds", async);
+		assertThat(async).as("No Async service available within 5 seconds").isNotNull();
 
-		logReaderTracker = new ServiceTracker<LogReaderService, LogReaderService>(getContext(), LogReaderService.class, null);
+		logReaderTracker = new ServiceTracker<LogReaderService, LogReaderService>(context, LogReaderService.class, null);
 		logReaderTracker.open();
 		logReader = logReaderTracker.waitForService(5000);
-		assertNotNull("No LogReaderService available within 5 seconds", logReader);
+		assertThat(logReader).as("No LogReaderService available within 5 seconds").isNotNull();
 		logReader.addLogListener(asyncErrors  = new AsyncErrorListener());
 	}
 	
-	protected void tearDown() {
+	@AfterEach
+	public void tearDown() {
 		delegateReg.unregister();
 		asyncExecutor.shutdown();
 
@@ -72,68 +83,74 @@ public class AsyncDelegateTestCase extends OSGiTestCase  {
 		logReaderTracker.close();
 	}
 
+	@Test
 	public void testCallDelegateReturnPromise() throws Exception {
 		MyService service = async.mediate(delegateReg.getReference(), MyService.class);
 
 		Promise<Integer> p = async.call(service.countSlowly(2));
-		assertFalse(p.isDone());
+		assertThat(p.isDone()).isFalse();
 		// Note that the delegate impl 2x the results so we can detect it was called
-		assertEquals("Wrong value.", 2 * 2, AsyncTestUtils.awaitResolve(p).intValue());
+		assertThat(AsyncTestUtils.awaitResolve(p).intValue()).as("Wrong value.").isEqualTo(2 * 2);
 
-		assertEquals("Wrong method called.", "async", myServiceDelegateFactory.getMySerivceImpl().getDelegateMethodCalled());
-		assertEquals("Wrong method called.", MyService.METHOD_countSlowly, myServiceDelegateFactory.getMySerivceImpl().lastMethodCalled());
+		assertThat(myServiceDelegateFactory.getMySerivceImpl().getDelegateMethodCalled()).as("Wrong method called.").isEqualTo("async");
+		assertThat(myServiceDelegateFactory.getMySerivceImpl().lastMethodCalled()).as("Wrong method called.").isEqualTo(MyService.METHOD_countSlowly);
 		myServiceDelegateFactory.awaitUngetService();
 	}
 
+	@Test
 	public void testCallDelegateReturnPromiseFail() throws Exception {
 		MyService service = async.mediate(delegateReg.getReference(), MyService.class);
 
 		Promise<Integer> p = async.call(service.failSlowly(2));
-		assertFalse(p.isDone());
-		assertTrue("Wrong failture type.", AsyncTestUtils.awaitFailure(p) instanceof MyServiceException);
+		assertThat(p.isDone()).isFalse();
+		assertThat(AsyncTestUtils.awaitFailure(p) instanceof MyServiceException).as("Wrong failture type.").isTrue();
 
-		assertEquals("Wrong method called.", "async", myServiceDelegateFactory.getMySerivceImpl().getDelegateMethodCalled());
-		assertEquals("Wrong method called.", MyService.METHOD_failSlowly, myServiceDelegateFactory.getMySerivceImpl().lastMethodCalled());
+		assertThat(myServiceDelegateFactory.getMySerivceImpl().getDelegateMethodCalled()).as("Wrong method called.").isEqualTo("async");
+		assertThat(myServiceDelegateFactory.getMySerivceImpl().lastMethodCalled()).as("Wrong method called.").isEqualTo(MyService.METHOD_failSlowly);
 		myServiceDelegateFactory.awaitUngetService();
 	}
 
+	@Test
 	public void testCallDelegateReturnNull() throws Exception {
 		MyService service = async.mediate(delegateReg.getReference(), MyService.class);
 
 		Promise<Integer> p = async.call(service.nonDelegateCountSlowly(2));
-		assertFalse(p.isDone());
-		assertEquals("Wrong value.", 2, AsyncTestUtils.awaitResolve(p).intValue());
+		assertThat(p.isDone()).isFalse();
+		assertThat(AsyncTestUtils.awaitResolve(p).intValue()).as("Wrong value.").isEqualTo(2);
 
-		assertEquals("Wrong method called.", "async", myServiceDelegateFactory.getMySerivceImpl().getDelegateMethodCalled());
-		assertEquals("Wrong method called.", MyService.METHOD_nonDelegateCountSlowly, myServiceDelegateFactory.getMySerivceImpl().lastMethodCalled());
+		assertThat(myServiceDelegateFactory.getMySerivceImpl().getDelegateMethodCalled()).as("Wrong method called.").isEqualTo("async");
+		assertThat(myServiceDelegateFactory.getMySerivceImpl().lastMethodCalled()).as("Wrong method called.").isEqualTo(MyService.METHOD_nonDelegateCountSlowly);
 		myServiceDelegateFactory.awaitUngetService();
 	}
 
+	@Test
 	public void testCallDelegateReturnNullFail() throws Exception {
 		MyService service = async.mediate(delegateReg.getReference(), MyService.class);
 
 		Promise<Integer> p = async.call(service.nonDelegateFailSlowly(2));
-		assertFalse(p.isDone());
-		assertTrue("Wrong failture type.", AsyncTestUtils.awaitFailure(p) instanceof MyServiceException);
+		assertThat(p.isDone()).isFalse();
+		assertThat(AsyncTestUtils.awaitFailure(p) instanceof MyServiceException).as("Wrong failture type.").isTrue();
 
-		assertEquals("Wrong method called.", "async", myServiceDelegateFactory.getMySerivceImpl().getDelegateMethodCalled());
-		assertEquals("Wrong method called.", MyService.METHOD_nonDelegateFailSlowly, myServiceDelegateFactory.getMySerivceImpl().lastMethodCalled());
+		assertThat(myServiceDelegateFactory.getMySerivceImpl().getDelegateMethodCalled()).as("Wrong method called.").isEqualTo("async");
+		assertThat(myServiceDelegateFactory.getMySerivceImpl().lastMethodCalled()).as("Wrong method called.").isEqualTo(MyService.METHOD_nonDelegateFailSlowly);
 		myServiceDelegateFactory.awaitUngetService();
 	}
 
+	@Test
 	public void testCallDelegateException() throws Exception {
 		MyService service = async.mediate(delegateReg.getReference(), MyService.class);
 
 		Promise<Integer> p = async.call(service.delegateFail());
 		// fails instantaneously
 		// assertFalse(p.isDone());
-		assertEquals("Wrong failture type", AsyncTestUtils.awaitFailure(p).getClass(), MyServiceException.class);
+		assertThat(MyServiceException.class).as("Wrong failture type").isEqualTo(AsyncTestUtils.awaitFailure(p).getClass());
 
-		assertEquals("Wrong method called.", "async", myServiceDelegateFactory.getMySerivceImpl().getDelegateMethodCalled());
-		assertNull("No method should have been called.", myServiceDelegateFactory.getMySerivceImpl().lastMethodCalled());
+		assertThat(myServiceDelegateFactory.getMySerivceImpl().getDelegateMethodCalled()).as("Wrong method called.").isEqualTo("async");
+		assertThat(myServiceDelegateFactory.getMySerivceImpl().lastMethodCalled()).as("No method should have been called.").isNull();
 		myServiceDelegateFactory.awaitUngetService();
 	}
 
+	@Test
 	public void testExecuteDelegateReturnTrue() throws Exception {
 		MyService service = async.mediate(delegateReg.getReference(), MyService.class);
 
@@ -141,10 +158,11 @@ public class AsyncDelegateTestCase extends OSGiTestCase  {
 		async.execute();
 
 		myServiceDelegateFactory.awaitUngetService();
-		assertEquals("Wrong method called.", "execute", myServiceDelegateFactory.getMySerivceImpl().getDelegateMethodCalled());
-		assertEquals("Wrong method called.", MyService.METHOD_countSlowly, myServiceDelegateFactory.getMySerivceImpl().lastMethodCalled());
+		assertThat(myServiceDelegateFactory.getMySerivceImpl().getDelegateMethodCalled()).as("Wrong method called.").isEqualTo("execute");
+		assertThat(myServiceDelegateFactory.getMySerivceImpl().lastMethodCalled()).as("Wrong method called.").isEqualTo(MyService.METHOD_countSlowly);
 	}
 
+	@Test
 	public void testExecuteDelegateReturnTrueFail() throws Exception {
 		MyService service = async.mediate(delegateReg.getReference(), MyService.class);
 
@@ -152,21 +170,23 @@ public class AsyncDelegateTestCase extends OSGiTestCase  {
 		// cannot check for logging here since the work is done on a thread outside of Async impl
 		async.execute();
 
-		assertEquals("Wrong method called.", "execute", myServiceDelegateFactory.getMySerivceImpl().getDelegateMethodCalled());
-		assertEquals("Wrong method called.", MyService.METHOD_failSlowly, myServiceDelegateFactory.getMySerivceImpl().lastMethodCalled());
+		assertThat(myServiceDelegateFactory.getMySerivceImpl().getDelegateMethodCalled()).as("Wrong method called.").isEqualTo("execute");
+		assertThat(myServiceDelegateFactory.getMySerivceImpl().lastMethodCalled()).as("Wrong method called.").isEqualTo(MyService.METHOD_failSlowly);
 		myServiceDelegateFactory.awaitUngetService();
 	}
 
+	@Test
 	public void testExecuteDelegateReturnFalse() throws Exception {
 		async.mediate(delegateReg.getReference(), MyService.class).nonDelegateCountSlowly(2);
 
 		async.execute();
 
 		myServiceDelegateFactory.awaitUngetService();
-		assertEquals("Wrong method called.", "execute", myServiceDelegateFactory.getMySerivceImpl().getDelegateMethodCalled());
-		assertEquals("Wrong method called.", MyService.METHOD_nonDelegateCountSlowly, myServiceDelegateFactory.getMySerivceImpl().lastMethodCalled());
+		assertThat(myServiceDelegateFactory.getMySerivceImpl().getDelegateMethodCalled()).as("Wrong method called.").isEqualTo("execute");
+		assertThat(myServiceDelegateFactory.getMySerivceImpl().lastMethodCalled()).as("Wrong method called.").isEqualTo(MyService.METHOD_nonDelegateCountSlowly);
 	}
 
+	@Test
 	public void testExecuteDelegateReturnFalseFail() throws Exception {
 		MyService service = async.mediate(delegateReg.getReference(), MyService.class);
 
@@ -174,21 +194,22 @@ public class AsyncDelegateTestCase extends OSGiTestCase  {
 		// cannot check for logging here since the work is done on a thread outside of Async impl
 		async.execute();
 
-		assertEquals("Wrong method called.", "execute", myServiceDelegateFactory.getMySerivceImpl().getDelegateMethodCalled());
-		assertEquals("Wrong method called.", MyService.METHOD_nonDelegateFailSlowly, myServiceDelegateFactory.getMySerivceImpl().lastMethodCalled());
+		assertThat(myServiceDelegateFactory.getMySerivceImpl().getDelegateMethodCalled()).as("Wrong method called.").isEqualTo("execute");
+		assertThat(myServiceDelegateFactory.getMySerivceImpl().lastMethodCalled()).as("Wrong method called.").isEqualTo(MyService.METHOD_nonDelegateFailSlowly);
 		myServiceDelegateFactory.awaitUngetService();
 	}
 
+	@Test
 	public void testExecuteDelegateException() throws Exception {
 		async.mediate(delegateReg.getReference(), MyService.class).delegateFail();
 
 		Promise<LogEntry> asyncErrorPromise = asyncErrors.getAsyncError();
 		async.execute();
 		Throwable error = AsyncTestUtils.awaitResolve(asyncErrorPromise).getException();
-		assertTrue("Wrong error type: " + error, error instanceof MyServiceException);
+		assertThat(error instanceof MyServiceException).as("Wrong error type: " + error).isTrue();
 
 		myServiceDelegateFactory.awaitUngetService();
-		assertEquals("Wrong method called.", "execute", myServiceDelegateFactory.getMySerivceImpl().getDelegateMethodCalled());
-		assertNull("No method should have been called.", myServiceDelegateFactory.getMySerivceImpl().lastMethodCalled());
+		assertThat(myServiceDelegateFactory.getMySerivceImpl().getDelegateMethodCalled()).as("Wrong method called.").isEqualTo("execute");
+		assertThat(myServiceDelegateFactory.getMySerivceImpl().lastMethodCalled()).as("No method should have been called.").isNull();
 	}
 }

@@ -17,10 +17,17 @@
  *******************************************************************************/
 package org.osgi.test.cases.async.junit;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.osgi.framework.BundleContext;
 import org.osgi.framework.ServiceRegistration;
 import org.osgi.framework.Version;
 import org.osgi.framework.wiring.BundleCapability;
@@ -32,11 +39,14 @@ import org.osgi.service.log.LogReaderService;
 import org.osgi.test.cases.async.junit.impl.AsyncErrorListener;
 import org.osgi.test.cases.async.junit.impl.MyServiceImpl;
 import org.osgi.test.cases.async.services.MyService;
-import org.osgi.test.support.OSGiTestCase;
+import org.osgi.test.common.annotation.InjectBundleContext;
 import org.osgi.util.promise.Promise;
 import org.osgi.util.tracker.ServiceTracker;
 
-public class AsyncTestCase extends OSGiTestCase {
+public class AsyncTestCase {
+
+	@InjectBundleContext
+	BundleContext		context;
 	
 	private ServiceTracker<Async, Async>	asyncTracker;
 	private Async	async;
@@ -49,24 +59,26 @@ public class AsyncTestCase extends OSGiTestCase {
 
 	private ServiceRegistration<MyService> normalReg;
 	
-	protected void setUp() throws InterruptedException {
+	@BeforeEach
+	public void setUp() throws InterruptedException {
 		myServiceImpl = new MyServiceImpl();
-		normalReg = getContext().registerService(MyService.class, myServiceImpl, null);
+		normalReg = context.registerService(MyService.class, myServiceImpl, null);
 
-		asyncTracker = new ServiceTracker<Async, Async>(getContext(), Async.class, null);
+		asyncTracker = new ServiceTracker<Async, Async>(context, Async.class, null);
 		asyncTracker.open();
 		async = asyncTracker.waitForService(5000);
 
-		assertNotNull("No Async service available within 5 seconds", async);
+		assertThat(async).as("No Async service available within 5 seconds").isNotNull();
 
-		logReaderTracker = new ServiceTracker<LogReaderService, LogReaderService>(getContext(), LogReaderService.class, null);
+		logReaderTracker = new ServiceTracker<LogReaderService, LogReaderService>(context, LogReaderService.class, null);
 		logReaderTracker.open();
 		logReader = logReaderTracker.waitForService(5000);
-		assertNotNull("No LogReaderService available within 5 seconds", logReader);
+		assertThat(logReader).as("No LogReaderService available within 5 seconds").isNotNull();
 		logReader.addLogListener(asyncErrors  = new AsyncErrorListener());
 	}
 	
-	protected void tearDown() {
+	@AfterEach
+	public void tearDown() {
 		normalReg.unregister();
 
 		asyncTracker.close();
@@ -78,6 +90,7 @@ public class AsyncTestCase extends OSGiTestCase {
 	 * A basic test that demonstrates that a call can be made asynchronously
 	 * @throws Exception
 	 */
+	@Test
 	public void testAsyncCall() throws Exception {
 		
 		MyService service = async.mediate(normalReg.getReference(), MyService.class);
@@ -88,10 +101,10 @@ public class AsyncTestCase extends OSGiTestCase {
 		// The promise should not have resolved yet. Theoretically this is
 		// a race, but it should not take over a second to get here from the
 		// previous statement.
-		assertFalse(p.isDone());
+		assertThat(p.isDone()).isFalse();
 		
-		assertEquals("Wrong value.", 2, AsyncTestUtils.awaitResolve(p).intValue());
-		assertEquals("Wrong method called.", MyService.METHOD_countSlowly, myServiceImpl.lastMethodCalled());
+		assertThat(AsyncTestUtils.awaitResolve(p).intValue()).as("Wrong value.").isEqualTo(2);
+		assertThat(myServiceImpl.lastMethodCalled()).as("Wrong method called.").isEqualTo(MyService.METHOD_countSlowly);
 	}
 
 	/**
@@ -100,6 +113,7 @@ public class AsyncTestCase extends OSGiTestCase {
 	 * 
 	 * @throws Exception
 	 */
+	@Test
 	public void testAsyncServiceCapability() throws Exception {
 
 		List<BundleCapability> capabilities = asyncTracker.getServiceReference().getBundle()
@@ -122,8 +136,8 @@ public class AsyncTestCase extends OSGiTestCase {
 				break;
 			}
 		}
-		assertTrue("No osgi.service capability for the Async service", hasCapability);
-		assertTrue("Missing uses constraint on the osgi.service capability", uses);
+		assertThat(hasCapability).as("No osgi.service capability for the Async service").isTrue();
+		assertThat(uses).as("Missing uses constraint on the osgi.service capability").isTrue();
 	}
 
 	/**
@@ -132,6 +146,7 @@ public class AsyncTestCase extends OSGiTestCase {
 	 * 
 	 * @throws Exception
 	 */
+	@Test
 	public void testAsyncImplementationCapability() throws Exception {
 
 		List<BundleCapability> capabilities = asyncTracker.getServiceReference().getBundle()
@@ -155,8 +170,8 @@ public class AsyncTestCase extends OSGiTestCase {
 				break;
 			}
 		}
-		assertTrue("No osgi.implementation capability for the Async service", hasCapability);
-		assertTrue("Missing uses constraint on the osgi.implementation capability", uses);
-		assertEquals(Version.parseVersion("1.0.0"), version);
+		assertThat(hasCapability).as("No osgi.implementation capability for the Async service").isTrue();
+		assertThat(uses).as("Missing uses constraint on the osgi.implementation capability").isTrue();
+		assertThat(version).isEqualTo(Version.parseVersion("1.0.0"));
 	}
 }

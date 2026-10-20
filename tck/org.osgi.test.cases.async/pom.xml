@@ -75,7 +75,7 @@
 		</dependency>
 		<dependency>
 			<groupId>org.osgi.tck</groupId>
-			<artifactId>org.osgi.test.support</artifactId>
+			<artifactId>org.osgi.tck.signature</artifactId>
 			<version>0.0.1-SNAPSHOT</version>
 			<scope>compile</scope>
 		</dependency>
@@ -108,6 +108,13 @@
 			<groupId>org.osgi</groupId>
 			<artifactId>org.osgi.service.async</artifactId>
 			<version>${revision}</version>
+			<scope>compile</scope>
+		</dependency>
+		<!-- came with org.osgi.test.support before -->
+		<dependency>
+			<groupId>org.osgi</groupId>
+			<artifactId>org.osgi.service.log</artifactId>
+			<version>${org.osgi.service.log.version}</version>
 			<scope>compile</scope>
 		</dependency>
 		<dependency>
